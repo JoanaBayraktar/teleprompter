@@ -101,8 +101,11 @@ class ScriptMatcher {
     const tail = spoken.slice(-8);
     const last = tail[tail.length - 1];
     const cur = Math.max(current, 0);
-    const lo = allowBack ? Math.max(0, cur - 20) : Math.max(0, current), hi = Math.min(w.length - 1, cur + 40);
+    // Nur-vorwärts-Modus: kleines Suchfenster, weite Sprünge brauchen mehr Übereinstimmung.
+    const lo = allowBack ? Math.max(0, cur - 20) : Math.max(0, current);
+    const hi = Math.min(w.length - 1, cur + (allowBack ? 40 : 15));
     const recentNeeded = Math.min(2, tail.length);
+    const distPenalty = allowBack ? 0.04 : 0.15;
 
     // 1) Lokal rund um die aktuelle Position
     let bestLocal = null, bestValue = -Infinity;
@@ -111,16 +114,31 @@ class ScriptMatcher {
       const m = this.align(tail, j);
       if (m.recent < recentNeeded && tail.length > 1) continue;
       const dist = j - current;
-      const ok = dist >= 0
-        ? (m.matched >= 2 || (dist <= 3 && [...w[j]].length >= 4))
-        : m.matched >= 3;
+      let ok;
+      if (dist < 0) ok = m.matched >= 3;
+      else if (dist <= 4 || allowBack) ok = m.matched >= 2 || (dist <= 3 && [...w[j]].length >= 4);
+      else ok = m.matched >= 3 && m.recent >= Math.min(3, tail.length) && m.score >= 2.6;
       if (!ok) continue;
-      const value = m.score - Math.abs(dist) * 0.04 - (dist < 0 ? 0.5 : 0);
+      const value = m.score - Math.abs(dist) * distPenalty - (dist < 0 ? 0.5 : 0);
       if (value > bestValue) { bestValue = value; bestLocal = m; }
     }
 
-    // 2) Global: von vorne angefangen oder weit gesprungen?
-    if (tail.length >= 3) {
+    // 1b) Aufholen: nichts in der Nähe gefunden → weiter vorne suchen, aber nur bei klarer Übereinstimmung.
+    if (!bestLocal && !allowBack && tail.length >= 4) {
+      const far = Math.min(w.length - 1, cur + 45);
+      for (let j = hi + 1; j <= far; j++) {
+        if (similarity(last, w[j]) < this.threshold) continue;
+        const m = this.align(tail, j);
+        if (m.matched < 5 || m.recent < 3 || m.score < 4.3) continue;
+        if (!bestLocal || m.score - (j - current) * 0.01 > bestValue) {
+          bestValue = m.score - (j - current) * 0.01;
+          bestLocal = m;
+        }
+      }
+    }
+
+    // 2) Global: von vorne angefangen oder weit gesprungen? (nur wenn Zurückspringen erlaubt)
+    if (allowBack && tail.length >= 3) {
       let bestGlobal = null;
       for (let j = 0; j < w.length; j++) {
         if (j <= hi && (j >= lo || !allowBack)) continue;
