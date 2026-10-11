@@ -224,6 +224,10 @@ class Follower {
     this.lastVoice = 0;
     this.lastChange = 0;
     this.quickFails = 0;
+    // Wörter im laufenden Transkript, die nach einem manuellen Sprung ignoriert werden.
+    // (Kein Neustart der Erkennung – der würde auf iOS jedes Mal einen Ton abspielen.)
+    this.baseline = 0;
+    this.tokenCount = 0;
   }
 
   get speaking() {
@@ -263,6 +267,8 @@ class Follower {
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     this.rec = rec;
+    this.baseline = 0;
+    this.tokenCount = 0;
     const started = performance.now();
     let gotResult = false;
     let lastTranscript = '';
@@ -314,7 +320,12 @@ class Follower {
   }
 
   _process(transcript) {
-    const r = this.matcher.locate(spokenTokens(transcript), this.position);
+    const tokens = spokenTokens(transcript);
+    this.tokenCount = tokens.length;
+    if (P.interacting) return; // während du den Text verschiebst, nichts übernehmen
+    const fresh = tokens.slice(this.baseline);
+    if (!fresh.length) return;
+    const r = this.matcher.locate(fresh, this.position);
     if (!r || r.match.index === this.position) return;
     const now = performance.now();
     const idx = r.match.index;
@@ -341,9 +352,9 @@ class Follower {
     this.displayed = this.position + 1;
     this.history = [];
     this.lastChange = performance.now();
+    // Bisher Gesprochenes ab jetzt ignorieren, damit es nicht zurückzieht.
+    this.baseline = this.tokenCount;
     this.onEvent('position');
-    // Neue Sitzung, damit alte Wörter nicht zurückziehen.
-    if (this.listening && this.rec) { try { this.rec.stop(); } catch { /* egal */ } }
   }
 
   /** Wortposition für die Leselinie, zwischen Erkennungen im Sprechtempo fortgeschrieben. */
