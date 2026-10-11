@@ -325,13 +325,18 @@ class Follower {
     if (P.interacting) return; // während du den Text verschiebst, nichts übernehmen
     const fresh = tokens.slice(this.baseline);
     if (!fresh.length) return;
-    const r = this.matcher.locate(fresh, this.position);
+    const cmd = findCommand(fresh);
+    if (cmd) {
+      this.baseline += cmd.end; // Befehl „verbraucht“
+      this.onEvent('command', cmd.command);
+      return;
+    }
+    const r = this.matcher.locate(fresh, this.position, false);
     if (!r || r.match.index === this.position) return;
     const now = performance.now();
     const idx = r.match.index;
-    if (r.isJump) {
-      this.onEvent('notice', idx <= 3 ? 'Neustart erkannt – zurück zum Anfang'
-        : idx < this.position ? 'Zurückgesprungen' : 'Weitergesprungen');
+    if (r.isJump || idx > this.position + 25) {
+      this.onEvent('notice', 'Weitergesprungen');
       this.history = [];
     }
     this.position = idx;
@@ -411,8 +416,16 @@ function openPrompter(id) {
   P.wordEls = [];
   P.cueEls = [];
   P.punctEls = []; // Satzzeichen nach Wort i, damit sie mit ausgegraut werden
+  P.paraStarts = [0]; // Wortindex, mit dem ein Absatz beginnt
+  const paraBreak = /\n\s*\n/.test(s.text) ? /\n\s*\n/ : /\n/;
+  let pendingBreak = false;
   let lastWord = -1;
   for (const part of parts) {
+    if (part.type !== 'word' && paraBreak.test(part.text)) pendingBreak = true;
+    if (part.type === 'word') {
+      if (pendingBreak && part.index > 0) P.paraStarts.push(part.index);
+      pendingBreak = false;
+    }
     if (part.type === 'space') {
       if (/^\s*$/.test(part.text) || lastWord < 0) {
         frag.append(document.createTextNode(part.text));
@@ -471,8 +484,34 @@ function closePrompter() {
 
 function onFollowerEvent(type, payload) {
   if (type === 'notice') showNotice(payload);
+  if (type === 'command') runCommand(payload);
   if (type === 'position' && settings.mode === 'voice') setHighlight(P.follower.position);
   updateControls();
+}
+
+// ---------- Sprachbefehle ----------
+function runCommand(command) {
+  const f = P.follower;
+  const starts = P.paraStarts;
+  const next = f.position + 1; // Wort, das als Nächstes gelesen wird
+  let current = 0;
+  for (let k = 0; k < starts.length; k++) if (starts[k] <= next) current = k;
+  if (command === 'start') {
+    f.setPosition(-1);
+    showNotice('⏮ Zum Anfang');
+  } else if (command === 'back') {
+    // Gerade erst angefangen? Dann einen Absatz weiter zurück.
+    const target = next - starts[current] <= 3 && current > 0 ? current - 1 : current;
+    f.setPosition(starts[target] - 1);
+    showNotice('↺ Absatz nochmal');
+  } else if (command === 'next') {
+    if (current + 1 < starts.length) {
+      f.setPosition(starts[current + 1] - 1);
+      showNotice('⏭ Nächster Absatz');
+    } else {
+      showNotice('Letzter Absatz');
+    }
+  }
 }
 
 // ---------- Layout ----------

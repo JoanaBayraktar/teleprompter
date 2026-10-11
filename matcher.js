@@ -91,14 +91,17 @@ class ScriptMatcher {
     return { index: end, matched, recent, score };
   }
 
-  /** @returns {{match, isJump}|null} */
-  locate(spoken, current) {
+  /**
+   * @param allowBack  false = nur vorwärts (Zurück nur per Sprachbefehl/Antippen)
+   * @returns {{match, isJump}|null}
+   */
+  locate(spoken, current, allowBack = true) {
     const w = this.words;
     if (!spoken.length || !w.length) return null;
     const tail = spoken.slice(-8);
     const last = tail[tail.length - 1];
     const cur = Math.max(current, 0);
-    const lo = Math.max(0, cur - 20), hi = Math.min(w.length - 1, cur + 40);
+    const lo = allowBack ? Math.max(0, cur - 20) : Math.max(0, current), hi = Math.min(w.length - 1, cur + 40);
     const recentNeeded = Math.min(2, tail.length);
 
     // 1) Lokal rund um die aktuelle Position
@@ -120,7 +123,7 @@ class ScriptMatcher {
     if (tail.length >= 3) {
       let bestGlobal = null;
       for (let j = 0; j < w.length; j++) {
-        if (j >= lo && j <= hi) continue;
+        if (j <= hi && (j >= lo || !allowBack)) continue;
         if (similarity(last, w[j]) < this.threshold) continue;
         const m = this.align(tail, j);
         if (m.recent < 3) continue;
@@ -137,4 +140,25 @@ class ScriptMatcher {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { tokenize, spokenTokens, ScriptMatcher, normalize };
+/**
+ * Sucht einen Sprachbefehl „Teleprompter Anfang / zurück / weiter“ in den Wörtern.
+ * @returns {{command: 'start'|'back'|'next', end: number}|null}  end = Index nach dem Befehl
+ */
+function findCommand(tokens) {
+  const words = {
+    start: ['anfang', 'vorne', 'start', 'beginn'],
+    back: ['zuruck', 'zurueck', 'nochmal'],
+    next: ['weiter', 'nachster', 'nachsten', 'vor'],
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    if (similarity(tokens[i], 'teleprompter') < 0.7 && tokens[i] !== 'prompter') continue;
+    for (let k = i + 1; k <= i + 3 && k < tokens.length; k++) {
+      for (const [command, list] of Object.entries(words)) {
+        if (list.includes(tokens[k])) return { command, end: k + 1 };
+      }
+    }
+  }
+  return null;
+}
+
+if (typeof module !== 'undefined') module.exports = { tokenize, spokenTokens, ScriptMatcher, normalize, findCommand };
