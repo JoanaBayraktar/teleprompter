@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Teleprompter">
+<meta name="theme-color" content="#000000">
+<title>Teleprompter</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ Bibliothek ============ -->
+<main id="library">
+  <header class="lib-header">
+    <h1>Teleprompter</h1>
+    <div class="lib-actions">
+      <button id="btnPaste" class="pill primary">Einsetzen</button>
+      <button id="btnNew" class="pill">Neu</button>
+      <button id="btnFile" class="pill">Datei</button>
+      <input id="fileInput" type="file" accept=".txt,.md,.markdown,.rtf,.text,text/plain,text/markdown,text/rtf" multiple hidden>
+    </div>
+  </header>
+
+  <div id="installHint" class="card hint" hidden>
+    <strong>Tipp:</strong> Tippe in Safari auf <span class="kbd">Teilen</span> → <span class="kbd">Zum Home-Bildschirm</span>.
+    Dann startet der Teleprompter wie eine App im Vollbild und behält deine Skripte dauerhaft.
+  </div>
+
+  <ul id="scriptList" class="list"></ul>
+
+  <details class="card help">
+    <summary>Skripte vom Laptop holen</summary>
+    <p><strong>Einsetzen (am schnellsten):</strong> Text auf dem Mac kopieren (⌘C), hier auf „Einsetzen“ tippen. Dafür müssen Mac und iPhone mit derselben Apple-ID angemeldet sein, Bluetooth und WLAN an.</p>
+    <p><strong>Datei:</strong> .txt-, .md- oder .rtf-Datei auf dem Mac in iCloud Drive legen, hier auf „Datei“ tippen und auswählen. Mehrere auf einmal gehen auch.</p>
+    <p><strong>Regieanweisungen:</strong> Text in [eckigen Klammern] wird gelb angezeigt und beim Mitlesen übersprungen.</p>
+  </details>
+</main>
+
+<!-- ============ Editor ============ -->
+<dialog id="editor">
+  <form method="dialog" class="editor-form">
+    <div class="editor-bar">
+      <button value="cancel" class="link">Abbrechen</button>
+      <strong id="editorTitle">Neues Skript</strong>
+      <button id="editorSave" value="save" class="link strong">Sichern</button>
+    </div>
+    <input id="editTitle" type="text" placeholder="Titel" autocomplete="off">
+    <textarea id="editText" placeholder="Text hier einfügen oder schreiben …"></textarea>
+  </form>
+</dialog>
+
+<!-- ============ Teleprompter ============ -->
+<section id="prompter" hidden>
+  <div id="stage">
+    <div id="text"></div>
+    <div id="marker"></div>
+    <div class="guide" id="guideL"></div>
+    <div class="guide" id="guideR"></div>
+  </div>
+
+  <div id="topbar">
+    <button id="btnClose" class="round" aria-label="Schließen">✕</button>
+    <div class="segmented" id="modeSwitch">
+      <button data-mode="voice">Stimme</button>
+      <button data-mode="auto">Auto</button>
+    </div>
+    <button id="btnSettings" class="round" aria-label="Darstellung">Aa</button>
+  </div>
+
+  <div id="bottom">
+    <div id="notice" hidden></div>
+    <div id="capsule">
+      <button id="btnTop" class="round" aria-label="Zum Anfang">⏮</button>
+      <span id="status" hidden><i id="dot"></i><span id="statusText"></span></span>
+      <input id="speed" type="range" min="10" max="200" step="1" hidden aria-label="Tempo">
+      <button id="btnMain" class="main" aria-label="Start"></button>
+    </div>
+  </div>
+
+  <!-- Einstellungs-Panel -->
+  <aside id="panel" hidden>
+    <div class="panel-head">
+      <button id="btnSwap" class="link" aria-label="Seite wechseln">⇆</button>
+      <strong>Darstellung</strong>
+      <button id="btnPanelDone" class="link strong">Fertig</button>
+    </div>
+    <div class="panel-body">
+      <h3>Spiegeln</h3>
+      <div class="group">
+        <label class="row"><span>Horizontal (Teleprompter-Glas)</span><input type="checkbox" class="switch" data-key="mirror"></label>
+        <label class="row"><span>Vertikal (auf dem Kopf)</span><input type="checkbox" class="switch" data-key="flipV"></label>
+      </div>
+
+      <h3>Schrift</h3>
+      <div class="group">
+        <div class="row">
+          <span>Größe</span>
+          <span class="stepper">
+            <button data-step="-2">−</button><output data-out="fontSize"></output><button data-step="2">+</button>
+          </span>
+        </div>
+        <div class="row col"><input type="range" data-key="fontSize" min="20" max="120" step="2"></div>
+        <div class="row col"><span>Zeilenabstand</span><input type="range" data-key="lineSpacing" min="0" max="1" step="0.05"></div>
+        <label class="row"><span>Zentriert</span><input type="checkbox" class="switch" data-key="centered"></label>
+      </div>
+
+      <h3>Rand &amp; Position</h3>
+      <div class="group">
+        <label class="row"><span>Beide Seiten gleich</span><input type="checkbox" class="switch" data-key="linkMargins"></label>
+        <div class="row col" id="rowMarginBoth"><span>Rand <output data-out="leftMargin"></output></span><input type="range" data-key="leftMargin" data-link="1" min="0" max="0.4" step="0.01"></div>
+        <div class="row col" id="rowMarginL"><span>Links <output data-out="leftMargin"></output></span><input type="range" data-key="leftMargin" min="0" max="0.4" step="0.01"></div>
+        <div class="row col" id="rowMarginR"><span>Rechts <output data-out="rightMargin"></output></span><input type="range" data-key="rightMargin" min="0" max="0.4" step="0.01"></div>
+        <div class="row col"><span>Leselinie</span><input type="range" data-key="readingLine" min="0.1" max="0.7" step="0.01"></div>
+      </div>
+      <p class="foot">Die gelben Linien zeigen den Textbereich. Mit getrennten Rändern schiebst du den Text seitlich vor das Objektiv.</p>
+
+      <h3>Sprachverfolgung</h3>
+      <div class="group">
+        <div class="row col"><span>Reaktion</span><input type="range" data-key="reaction" min="3" max="14" step="0.5"><span class="ends"><span>ruhig</span><span>schnell</span></span></div>
+        <div class="row col"><span>Vorlauf <output data-out="leadWords"></output></span><input type="range" data-key="leadWords" min="0" max="4" step="0.5"></div>
+        <div class="row col"><span>Pause erkennen nach <output data-out="pauseDelay"></output></span><input type="range" data-key="pauseDelay" min="0.3" max="2" step="0.1"></div>
+        <label class="row"><span>Sprache</span>
+          <select data-key="lang">
+            <option value="de-DE">Deutsch</option>
+            <option value="de-AT">Deutsch (Österreich)</option>
+            <option value="de-CH">Deutsch (Schweiz)</option>
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="tr-TR">Türkçe</option>
+          </select>
+        </label>
+      </div>
+      <p class="foot">Reaktion: wie schnell der Text nachzieht. Vorlauf: wie weit der Text deiner Stimme voraus ist. Pause: wie lange Stille, bis der Text stehen bleibt.</p>
+
+      <div class="group"><button id="btnReset" class="row danger">Auf Standard zurücksetzen</button></div>
+    </div>
+  </aside>
+</section>
+
+<script src="matcher.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
