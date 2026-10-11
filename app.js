@@ -19,7 +19,7 @@ const DEFAULTS = {
   fontSize: 40, lineSpacing: 0.25, readingLine: 0.33, centered: false,
   mirror: false, flipV: false,
   leftMargin: 0.07, rightMargin: 0.07, linkMargins: true,
-  reaction: 7, leadWords: 1, pauseDelay: 0.6, lang: 'de-DE',
+  reaction: 7, leadLines: 0, pauseDelay: 0.6, lang: 'de-DE',
   mode: 'voice', autoSpeed: 50, panelLeft: false,
 };
 let settings = { ...DEFAULTS, ...LS.get('tp.settings', {}) };
@@ -215,7 +215,7 @@ class Follower {
     this.count = words.length;
     this.onEvent = onEvent;
     this.position = -1;
-    this.displayed = 0;
+    this.focus = 0; // Wort, dessen Zeile am Pfeil steht
     this.listening = false;
     this.status = 'idle';
     this.error = '';
@@ -340,6 +340,7 @@ class Follower {
       this.history = [];
     }
     this.position = idx;
+    this.focus = idx;
     this.lastChange = now;
     this.history.push({ t: now, i: idx });
     this.history = this.history.filter((h) => now - h.t <= 8000);
@@ -354,26 +355,13 @@ class Follower {
 
   setPosition(i) {
     this.position = Math.min(Math.max(i, -1), this.count - 1);
-    this.displayed = this.position + 1;
+    // Angetipptes/angesteuertes Wort (= nächstes zu lesendes) steht am Pfeil.
+    this.focus = Math.min(this.position + 1, Math.max(this.count - 1, 0));
     this.history = [];
     this.lastChange = performance.now();
     // Bisher Gesprochenes ab jetzt ignorieren, damit es nicht zurückzieht.
     this.baseline = this.tokenCount;
     this.onEvent('position');
-  }
-
-  /** Wortposition für die Leselinie, zwischen Erkennungen im Sprechtempo fortgeschrieben. */
-  displayPosition() {
-    const now = performance.now();
-    const lastIdx = Math.max(this.count - 1, 0);
-    const extra = this.listening && this.position >= 0 ? settings.leadWords - 1 : 0;
-    let target = Math.min(Math.max(this.position + 1 + extra, 0), lastIdx);
-    if (this.position >= 0 && this.speaking) {
-      const wps = this.wpm ? Math.min(Math.max(this.wpm / 60, 1.2), 4.5) : 2.2;
-      target = Math.min(target + Math.min((now - this.lastChange) / 1000 * wps, 1.5), lastIdx);
-    }
-    if (target > this.displayed || target < this.displayed - 3) this.displayed = target;
-    return this.displayed;
   }
 }
 
@@ -550,13 +538,11 @@ function applyLayout() {
   }
 }
 
-function yForPosition(p) {
+/** Mitte der Zeile, in der Wort i steht (alle Wörter einer Zeile haben dieselbe Höhe). */
+function yForWord(i) {
   const m = P.wordMid;
   if (!m.length) return 0;
-  const c = Math.min(Math.max(p, 0), m.length - 1);
-  const i = Math.floor(c), f = c - i;
-  const y0 = m[i], y1 = m[Math.min(i + 1, m.length - 1)];
-  return y0 + (y1 - y0) * f;
+  return m[Math.min(Math.max(i, 0), m.length - 1)];
 }
 
 function wordAtReadingLine() {
@@ -601,7 +587,9 @@ function frame(now) {
   P.lastFrame = now;
   if (P.active && !P.interacting && P.wordMid.length) {
     if (settings.mode === 'voice') {
-      const target = clampOffset(yForPosition(P.follower.displayPosition()) - P.readingY);
+      // Zeilenweise: die Zeile des zuletzt gesprochenen Wortes steht am Pfeil (+ optionaler Vorlauf).
+      const lineHeight = settings.fontSize * (1.2 + settings.lineSpacing);
+      const target = clampOffset(yForWord(P.follower.focus) - P.readingY + settings.leadLines * lineHeight);
       const diff = target - P.offset;
       if (Math.abs(diff) > 0.25) {
         P.offset = Math.abs(diff) > stageEl.clientHeight * 2
@@ -802,7 +790,7 @@ function formatOut(key) {
   switch (key) {
     case 'fontSize': return `${v} pt`;
     case 'leftMargin': case 'rightMargin': return `${Math.round(v * 100)} %`;
-    case 'leadWords': return v === 1 ? '1 Wort' : `${String(v).replace('.', ',')} Wörter`;
+    case 'leadLines': return v === 0 ? 'aus' : v === 1 ? '1 Zeile' : `${String(v).replace('.', ',')} Zeilen`;
     case 'pauseDelay': return `${v.toFixed(1).replace('.', ',')} s`;
     default: return String(v);
   }

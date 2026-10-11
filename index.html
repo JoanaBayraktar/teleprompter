@@ -125,7 +125,7 @@
       <h3>Sprachverfolgung</h3>
       <div class="group">
         <div class="row col"><span>Reaktion</span><input type="range" data-key="reaction" min="3" max="14" step="0.5"><span class="ends"><span>ruhig</span><span>schnell</span></span></div>
-        <div class="row col"><span>Vorlauf <output data-out="leadWords"></output></span><input type="range" data-key="leadWords" min="0" max="4" step="0.5"></div>
+        <div class="row col"><span>Vorlauf <output data-out="leadLines"></output></span><input type="range" data-key="leadLines" min="0" max="2" step="0.25"></div>
         <div class="row col"><span>Pause erkennen nach <output data-out="pauseDelay"></output></span><input type="range" data-key="pauseDelay" min="0.3" max="2" step="0.1"></div>
         <label class="row"><span>Sprache</span>
           <select data-key="lang">
@@ -139,7 +139,7 @@
         </label>
       </div>
       <p class="foot">Sprachbefehle: „Teleprompter Anfang“, „Teleprompter zurück“ (Absatz nochmal), „Teleprompter weiter“ (nächster Absatz).</p>
-      <p class="foot">Reaktion: wie schnell der Text nachzieht. Vorlauf: wie weit der Text deiner Stimme voraus ist. Pause: wie lange Stille, bis der Text stehen bleibt.</p>
+      <p class="foot">Reaktion: wie schnell der Text nachzieht. Vorlauf: wie viele Zeilen der Text vorausläuft (aus = aktuelle Zeile genau am Pfeil). Pause: wie lange Stille, bis der Text stehen bleibt.</p>
 
       <div class="group"><button id="btnReset" class="row danger">Auf Standard zurücksetzen</button></div>
     </div>
