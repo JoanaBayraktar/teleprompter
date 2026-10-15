@@ -205,6 +205,64 @@ $('installHint').hidden = !(isIOS && !isStandalone);
 navigator.storage?.persist?.();
 
 // ============================================================
+// Skripte aus dem GitHub-Repo (Ordner scripts/)
+// ============================================================
+// Owner/Repo aus der Pages-Adresse ableiten (joanabayraktar.github.io/teleprompter/).
+const REPO = (() => {
+  const owner = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : 'JoanaBayraktar';
+  const repo = location.hostname.endsWith('.github.io') ? (location.pathname.split('/')[1] || 'teleprompter') : 'teleprompter';
+  return `${owner}/${repo}`;
+})();
+let repoScripts = LS.get('tp.repoScripts', []); // Cache, damit sie auch offline da sind
+
+async function loadRepoScripts() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/scripts`, { cache: 'no-store' });
+    if (!res.ok) return; // Ordner fehlt oder Limit erreicht → Cache behalten
+    const files = (await res.json()).filter((f) => f.type === 'file' && /\.(txt|md|markdown|rtf|text)$/i.test(f.name));
+    const cached = new Map(repoScripts.map((r) => [r.id, r]));
+    const next = [];
+    for (const f of files) {
+      const id = 'gh:' + f.path;
+      const old = cached.get(id);
+      if (old && old.sha === f.sha) { next.push(old); continue; }
+      const text = await (await fetch(f.download_url, { cache: 'no-store' })).text();
+      next.push({ id, sha: f.sha, title: f.name.replace(/\.[^.]+$/, ''), text: cleanImported(text, f.name), updated: 0 });
+    }
+    next.sort((a, b) => a.title.localeCompare(b.title, 'de'));
+    repoScripts = next;
+    LS.set('tp.repoScripts', repoScripts);
+    renderRepoList();
+  } catch { /* offline → Cache */ }
+}
+
+function renderRepoList() {
+  const list = $('repoList');
+  list.innerHTML = '';
+  $('repoSection').hidden = repoScripts.length === 0;
+  for (const s of repoScripts) {
+    const li = document.createElement('li');
+    li.className = 'item';
+    const main = document.createElement('button');
+    main.className = 'item-main';
+    const words = wordCount(s.text);
+    main.innerHTML = '<div class="item-title"></div><div class="item-preview"></div><div class="item-meta"></div>';
+    main.children[0].textContent = s.title;
+    main.children[1].textContent = s.text.replace(/\s+/g, ' ').slice(0, 160);
+    main.children[2].textContent = `${words} Wörter · ca. ${Math.max(1, Math.round(words / 140))} Min.`;
+    main.onclick = () => openPrompter(s.id);
+    // Kopie anlegen, um sie auf dem Handy zu bearbeiten
+    const copy = document.createElement('button');
+    copy.className = 'item-btn';
+    copy.textContent = '✎';
+    copy.setAttribute('aria-label', 'Als eigene Kopie bearbeiten');
+    copy.onclick = () => { const c = addScript(s.title, s.text); openEditor(c.id); };
+    li.append(main, copy);
+    list.append(li);
+  }
+}
+
+// ============================================================
 // Sprachverfolgung
 // ============================================================
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -395,7 +453,7 @@ const ICONS = {
 };
 
 function openPrompter(id) {
-  const s = scripts.find((x) => x.id === id);
+  const s = scripts.find((x) => x.id === id) || repoScripts.find((x) => x.id === id);
   if (!s) return;
   P.script = s;
   const { parts, words } = tokenize(s.text);
@@ -752,6 +810,7 @@ for (const b of $('modeSwitch').children) b.onclick = () => setMode(b.dataset.mo
 window.addEventListener('resize', () => applyLayout());
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
+    loadRepoScripts();
     if (P.active) lockScreen();
   } else {
     P.follower?.stop();
@@ -842,6 +901,8 @@ $('btnReset').onclick = () => {
 // Start
 // ============================================================
 renderLibrary();
+renderRepoList();
+loadRepoScripts();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

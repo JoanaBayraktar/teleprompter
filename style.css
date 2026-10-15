@@ -30,6 +30,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .kbd { background: var(--card2); padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
 .help summary { font-weight: 600; cursor: pointer; }
 .help p { color: #ccc; font-size: 15px; }
+.section-title { font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; margin: 22px 6px 8px; }
 .list { list-style: none; padding: 0; margin: 0; background: var(--card); border-radius: 14px; overflow: hidden; }
 .list:empty::before { content: "Noch keine Skripte. Tippe auf „Einsetzen“ oder „Neu“."; display: block; padding: 18px 16px; color: var(--muted); }
 .item { display: flex; align-items: stretch; border-bottom: 1px solid var(--border); }
